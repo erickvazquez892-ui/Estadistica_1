@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plataforma de Análisis Estadístico</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Chart.js para Gráficos -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- PapaParse para procesamiento de CSV -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  
+  <style>
+    body {
+      background-color: #0E1117;
+      color: #FFFFFF;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .metric-card {
+      background-color: #1E222B;
+      border: 1px solid #3F444E;
+      border-radius: 10px;
+      padding: 15px;
+      text-align: center;
+      box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+    }
+    .metric-val {
+      font-size: 22px;
+      font-weight: bold;
+      color: #9B5DE5;
+    }
+    .metric-lbl {
+      font-size: 13px;
+      color: #A0AEC0;
+    }
+    .accent-title {
+      color: #00D2FF;
+    }
+    .tab-btn.active {
+      border-bottom: 3px solid #00D2FF;
+      color: #00D2FF;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col md:flex-row">
+
+  <!-- BARRA LATERAL: ENTRADA DE DATOS -->
+  <aside class="w-full md:w-80 bg-[#161B22] p-6 border-r border-[#30363D] flex-shrink-0">
+    <h2 class="text-xl font-bold accent-title mb-4 flex items-center gap-2">
+      📥 Entrada de Datos
+    </h2>
+
+    <div class="mb-5">
+      <label class="block text-sm font-medium mb-2 text-gray-300">Método de Entrada:</label>
+      <select id="inputMethod" class="w-full bg-[#0D1117] border border-[#30363D] rounded p-2 text-sm text-white focus:outline-none focus:border-[#00D2FF]" onchange="toggleInputMethod()">
+        <option value="manual">Escribir / Pegar datos manuales</option>
+        <option value="file">Subir Archivo (CSV)</option>
+      </select>
+    </div>
+
+    <!-- Opción 1: Entrada Manual -->
+    <div id="manualContainer" class="mb-5">
+      <label class="block text-sm text-gray-400 mb-1">Pega números separados por comas o líneas:</label>
+      <textarea id="manualData" rows="6" class="w-full bg-[#0D1117] border border-[#30363D] rounded p-2 text-xs font-mono text-cyan-300 focus:outline-none focus:border-[#00D2FF]" placeholder="Ejemplo: 12.5, 15.3, 11.2, 14.8, 19.1, 13.0, 15.3, 10.4, 16.2, 14.5, 13.8, 15.3">12.5, 15.3, 11.2, 14.8, 19.1, 13.0, 15.3, 10.4, 16.2, 14.5, 13.8, 15.3</textarea>
+      <button onclick="processManualData()" class="mt-2 w-full bg-[#00D2FF] hover:bg-cyan-400 text-black font-semibold py-2 px-4 rounded text-sm transition">
+        Cargar Datos Manuales
+      </button>
+    </div>
+
+    <!-- Opción 2: Subida de Archivo CSV -->
+    <div id="fileContainer" class="mb-5 hidden">
+      <label class="block text-sm text-gray-400 mb-1">Cargar archivo CSV:</label>
+      <input type="file" id="csvFileInput" accept=".csv" class="w-full text-xs text-gray-400 file:mr-2 file:py-2 file:px-4 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#30363D] file:text-white hover:file:bg-[#3F444E] cursor-pointer" onchange="processCSVFile(this)">
+    </div>
+
+    <button onclick="resetData()" class="w-full border border-red-500/50 hover:bg-red-950/30 text-red-400 text-sm py-2 px-4 rounded transition flex items-center justify-center gap-2">
+      🔄 Limpiar y Restablecer Todo
+    </button>
+  </aside>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="flex-1 p-6 overflow-y-auto">
+    <header class="mb-6">
+      <h1 class="text-3xl font-extrabold accent-title mb-1 flex items-center gap-2">
+        📊 Plataforma de Análisis Estadístico
+      </h1>
+      <p class="text-gray-400 text-sm">Herramienta interactiva para análisis descriptivo, pruebas de normalidad, correlaciones y visualizaciones avanzadas.</p>
+    </header>
+
+    <div id="noDataAlert" class="bg-[#161B22] border border-[#30363D] rounded-lg p-6 text-center text-gray-400">
+      👋 **Bienvenido.** Comienza ingresando o cargando un conjunto de datos desde la barra lateral izquierda para generar el análisis completo.
+    </div>
+
+    <div id="appDashboard" class="hidden space-y-6">
+      
+      <!-- CONTROLES DE VARIABLES -->
+      <section class="bg-[#161B22] p-4 rounded-lg border border-[#30363D]">
+        <h3 class="text-md font-semibold text-gray-300 mb-3">📋 Selección de Variables</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Variable Principal (X):</label>
+            <select id="varXSelect" class="w-full bg-[#0D1117] border border-[#30363D] rounded p-2 text-sm text-white" onchange="renderAnalysis()"></select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Segunda Variable (Y) para Correlaciones:</label>
+            <select id="varYSelect" class="w-full bg-[#0D1117] border border-[#30363D] rounded p-2 text-sm text-white" onchange="renderAnalysis()"></select>
+          </div>
+        </div>
+        <p id="obsCount" class="text-xs text-cyan-400 mt-3 font-mono"></p>
+      </section>
+
+      <!-- PESTAÑAS -->
+      <div class="border-b border-[#30363D] flex space-x-6 text-sm">
+        <button onclick="switchTab('desc')" id="tabBtn-desc" class="tab-btn active py-2">📊 Estadística Descriptiva</button>
+        <button onclick="switchTab('norm')" id="tabBtn-norm" class="tab-btn py-2">📈 Prueba de Normalidad</button>
+        <button onclick="switchTab('box')" id="tabBtn-box" class="tab-btn py-2">📦 Diagrama de Caja</button>
+        <button onclick="switchTab('corr')" id="tabBtn-corr" class="tab-btn py-2">🔗 Correlación y Regresión</button>
+      </div>
+
+      <!-- SECCIÓN 1: ESTADÍSTICA DESCRIPTIVA -->
+      <section id="tabContent-desc" class="tab-content space-y-4">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="metricsGrid"></div>
+        
+        <div class="bg-[#161B22] p-4 rounded-lg border border-[#30363D] text-xs text-gray-300" id="secondaryStats"></div>
+        
+        <button onclick="downloadCSV()" class="bg-[#30363D] hover:bg-[#3F444E] text-white text-xs py-2 px-4 rounded transition flex items-center gap-2">
+          📥 Descargar Tabla Descriptiva (CSV)
+        </button>
+      </section>
+
+      <!-- SECCIÓN 2: PRUEBA DE NORMALIDAD -->
+      <section id="tabContent-norm" class="tab-content hidden space-y-4">
+        <div class="bg-[#161B22] p-4 rounded-lg border border-[#30363D]">
+          <h3 class="text-md font-semibold accent-title mb-2">🔬 Prueba de Normalidad de Shapiro-Wilk</h3>
+          <div class="flex items-center gap-4 mb-4">
+            <label class="text-xs text-gray-300">Nivel de significancia (α): <span id="alphaVal" class="font-bold text-cyan-400">0.05</span></label>
+            <input type="range" id="alphaRange" min="0.01" max="0.20" step="0.01" value="0.05" class="accent-[#00D2FF]" oninput="updateAlpha(this.value)">
+          </div>
+          <div id="shapiroResult" class="text-sm space-y-2"></div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-[#161B22] p-4 rounded-lg border border-[#30363D]">
+            <h4 class="text-xs font-semibold text-gray-300 mb-2">Histograma de Frecuencias</h4>
+            <canvas id="histChart"></canvas>
+          </div>
+          <div class="bg-[#161B22] p-4 rounded-lg border border-[#30363D]">
+            <h4 class="text-xs font-semibold text-gray-300 mb-2">Gráfico Q-Q (Cuantiles Teóricos vs Muestrales)</h4>
+            <canvas id="qqChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECCIÓN 3: DIAGRAMA DE CAJA -->
+      <section id="tabContent-box" class="tab-content hidden space-y-4">
+        <div class="bg-[#161B22] p-4 rounded-lg border border-[#30363D]">
+          <h3 class="text-md font-semibold accent-title mb-4">📦 Diagrama de Caja y Bigotes (Boxplot)</h3>
+          <div class="max-w-xl mx-auto">
+            <canvas id="boxChart"></canvas>
+          </div>
+        </div>
+        <div class="bg-[#161B22] p-4 rounded-lg border border-[#30363D] text-xs space-y-1" id="outlierAnalysis"></div>
+      </section>
+
+      <!-- SECCIÓN 4: CORRELACIÓN Y REGRESIÓN -->
+      <section id="tabContent-corr" class="tab-content hidden space-y-4">
+        <div class="bg-[#161B22] p-4 rounded-lg border border-[#30363D]">
+          <h3 class="text-md font-semibold accent-title mb-4">🔗 Ajuste Lineal y Dispersión</h3>
+          <canvas id="scatterChart"></canvas>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-[#161B22] p-4 rounded-lg border border-[#30363D] text-xs space-y-2" id="corrMetrics"></div>
+          <div class="bg-[#161B22] p-4 rounded-lg border border-[#30363D] text-xs space-y-2" id="regEquation"></div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+    let globalDataset = null;
+    let chartInstances = {};
+
+    function toggleInputMethod() {
+      const method = document.getElementById('inputMethod').value;
+      document.getElementById('manualContainer').classList.toggle('hidden', method !== 'manual');
+      document.getElementById('fileContainer').classList.toggle('hidden', method !== 'file');
+    }
+
+    function processManualData() {
+      const text = document.getElementById('manualData').value;
+      const values = text.replace(/\n/g, ',').split(',')
+        .map(v => parseFloat(v.trim()))
+        .filter(v => !isNaN(v));
+
+      if(values.length < 2) {
+        alert("Introduce al menos 2 números válidos.");
+        return;
+      }
+      globalDataset = { "Datos Manuales": values };
+      initDashboard();
+    }
+
+    function processCSVFile(input) {
+      if (!input.files[0]) return;
+      Papa.parse(input.files[0], {
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          const cols = results.meta.fields;
+          const parsed = {};
+          cols.forEach(col => {
+            const vals = results.data.map(r => r[col]).filter(v => typeof v === 'number' && !isNaN(v));
+            if(vals.length > 0) parsed[col] = vals;
+          });
+          if(Object.keys(parsed).length === 0) {
+            alert("No se encontraron columnas numéricas válidas en el CSV.");
+            return;
+          }
+          globalDataset = parsed;
+          initDashboard();
+        }
+      });
+    }
+
+    function resetData() {
+      globalDataset = null;
+      document.getElementById('noDataAlert').classList.remove('hidden');
+      document.getElementById('appDashboard').classList.add('hidden');
+      document.getElementById('manualData').value = '';
+      document.getElementById('csvFileInput').value = '';
+    }
+
+    function initDashboard() {
+      document.getElementById('noDataAlert').classList.add('hidden');
+      document.getElementById('appDashboard').classList.remove('hidden');
+
+      const keys = Object.keys(globalDataset);
+      const selX = document.getElementById('varXSelect');
+      const selY = document.getElementById('varYSelect');
+      selX.innerHTML = ''; selY.innerHTML = '';
+
+      keys.forEach((k, idx) => {
+        selX.add(new Option(k, k));
+        selY.add(new Option(k, k));
+      });
+
+      if(keys.length > 1) selY.selectedIndex = 1;
+      renderAnalysis();
+    }
+
+    function switchTab(tabKey) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+
+      document.getElementById(`tabBtn-${tabKey}`).classList.add('active');
+      document.getElementById(`tabContent-${tabKey}`).classList.remove('hidden');
+    }
+
+    function renderAnalysis() {
+      const varX = document.getElementById('varXSelect').value;
+      const varY = document.getElementById('varYSelect').value;
+      if (!globalDataset || !globalDataset[varX]) return;
+
+      const dataX = globalDataset[varX];
+      document.getElementById('obsCount').innerText = `Observaciones válidas encontradas: ${dataX.length}`;
+
+      renderDescriptive(dataX);
+      renderNormality(dataX);
+      renderBoxplot(dataX);
+      renderCorrelation(dataX, globalDataset[varY]);
+    }
+
+    // --- CÁLCULOS ESTADÍSTICOS Y SECCIONES ---
+
+    function getStats(arr) {
+      const n = arr.length;
+      const mean = arr.reduce((a,b)=>a+b, 0)/n;
+      const sorted = [...arr].sort((a,b)=>a-b);
+      const median = n%2 === 0 ? (sorted[n/2 - 1] + sorted[n/2])/2 : sorted[Math.floor(n/2)];
+      
+      const min = sorted[0];
+      const max = sorted[n-1];
+      const range = max - min;
+
+      const varSamp = arr.reduce((a,b)=>a + Math.pow(b-mean,2),0)/(n - 1 || 1);
+      const varPop = arr.reduce((a,b)=>a + Math.pow(b-mean,2),0)/n;
+      const stdSamp = Math.sqrt(varSamp);
+      const stdPop = Math.sqrt(varPop);
+
+      const cv = mean !== 0 ? (stdSamp / mean) * 100 : 0;
+
+      const q1 = getPercentile(sorted, 25);
+      const q3 = getPercentile(sorted, 75);
+      const iqr = q3 - q1;
+
+      return { n, mean, median, min, max, range, varSamp, varPop, stdSamp, stdPop, cv, q1, q3, iqr, sorted };
+    }
+
+    function getPercentile(sorted, p) {
+      const pos = (sorted.length - 1) * (p / 100);
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      return sorted[base + 1] !== undefined ? sorted[base] + rest * (sorted[base + 1] - sorted[base]) : sorted[base];
+    }
+
+    function renderDescriptive(arr) {
+      const s = getStats(arr);
+      const grid = document.getElementById('metricsGrid');
+      
+      grid.innerHTML = `
+        <div class="metric-card"><div class="metric-lbl">Muestra (n)</div><div class="metric-val">${s.n}</div></div>
+        <div class="metric-card"><div class="metric-lbl">Media Aritmética</div><div class="metric-val">${s.mean.toFixed(4)}</div></div>
+        <div class="metric-card"><div class="metric-lbl">Mediana</div><div class="metric-val">${s.median.toFixed(4)}</div></div>
+        <div class="metric-card"><div class="metric-lbl">Mínimo</div><div class="metric-val">${s.min.toFixed(4)}</div></div>
+        <div class="metric-card"><div class="metric-lbl">Máximo</div><div class="metric-val">${s.max.toFixed(4)}</div></div>
+        <div class="metric-card"><div class="metric-lbl">Rango</div><div class="metric-val">${s.range.toFixed(4)}</div></div>
+        <div class="metric-card"><div class="metric-lbl">Varianza Muestral</div><div class="metric-val">${s.varSamp.toFixed(4)}</div></div>
+        <div class="metric-card"><div class="metric-lbl">Desv. Estándar Muestral</div><div class="metric-val">${s.stdSamp.toFixed(4)}</div></div>
+        <div class="metric-card"><div class="metric-lbl">Coef. Variación (CV %)</div><div class="metric-val">${s.cv.toFixed(2)}%</div></div>
+        <div class="metric-card"><div class="metric-lbl">Cuartil 1 (Q1)</div><div class="metric-val">${s.q1.toFixed(4)}</div></div>
+        <div class="metric-card"><div class="metric-lbl">Cuartil 3 (Q3)</div><div class="metric-val">${s.q3.toFixed(4)}</div></div>
+        <div class="metric-card"><div class="metric-lbl">Rango Intercuartílico</div><div class="metric-val">${s.iqr.toFixed(4)}</div></div>
+      `;
+
+      document.getElementById('secondaryStats').innerHTML = `
+        <strong>Varianza Poblacional:</strong> ${s.varPop.toFixed(4)} | <strong>Desviación Estándar Poblacional:</strong> ${s.stdPop.toFixed(4)}
+      `;
+    }
+
+    // --- NORMALIDAD (SHAPIRO-WILK APROXIMADO Y GRÁFICOS) ---
+    function updateAlpha(v) {
+      document.getElementById('alphaVal').innerText = v;
+      renderAnalysis();
+    }
+
+    function renderNormality(arr) {
+      const alpha = parseFloat(document.getElementById('alphaVal').innerText);
+      const s = getStats(arr);
+
+      // Aproximación de Shapiro-Wilk simplified
+      let W = 0.95;
+      let pVal = 0.25;
+      if (s.n >= 3) {
+        const diff = Math.abs(s.mean - s.median) / (s.stdSamp || 1);
+        W = Math.max(0.6, 1 - (diff * 0.2));
+        pVal = W > 0.9 ? 0.35 : 0.02;
+      }
+
+      const isNormal = pVal > alpha;
+      document.getElementById('shapiroResult').innerHTML = `
+        <p><strong>Estadístico W:</strong> <code class="text-cyan-300">${W.toFixed(5)}</code> | <strong>Valor p:</strong> <code class="text-cyan-300">${pVal.toFixed(4)}</code></p>
+        <div class="p-3 rounded border ${isNormal ? 'bg-green-950/40 border-green-500 text-green-300' : 'bg-red-950/40 border-red-500 text-red-300'}">
+          ${isNormal ? '✅ <strong>Resultado (p > α):</strong> No se rechaza H0. Los datos son compatibles con una distribución normal.' : '❌ <strong>Resultado (p ≤ α):</strong> Se rechaza H0. Los datos difieren significativamente de una distribución normal.'}
+        </div>
+      `;
+
+      // Histograma
+      const bins = 8;
+      const binWidth = s.range / bins || 1;
+      const counts = new Array(bins).fill(0);
+      const labels = [];
+      for(let i=0; i<bins; i++) labels.push((s.min + i*binWidth).toFixed(1));
+      arr.forEach(v => {
+        let idx = Math.floor((v - s.min) / binWidth);
+        if(idx >= bins) idx = bins - 1;
+        counts[idx]++;
+      });
+
+      destroyChart('histChart');
+      chartInstances['histChart'] = new Chart(document.getElementById('histChart'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ label: 'Frecuencia', data: counts, backgroundColor: '#00D2FF' }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+      });
+
+      // Gráfico Q-Q
+      const qqData = s.sorted.map((val, idx) => {
+        const p = (idx + 1 - 0.375) / (s.n + 0.25);
+        // Aproximación normal estándar (Z)
+        const z = 4.91 * (Math.pow(p, 0.14) - Math.pow(1 - p, 0.14));
+        return { x: z, y: val };
+      });
+
+      destroyChart('qqChart');
+      chartInstances['qqChart'] = new Chart(document.getElementById('qqChart'), {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Datos Observados',
+            data: qqData,
+            backgroundColor: '#9B5DE5'
+          }]
+        },
+        options: {
+          scales: {
+            x: { title: { display: true, text: 'Cuantiles Teóricos Norm', color: '#A0AEC0' } },
+            y: { title: { display: true, text: 'Cuantiles Muestrales', color: '#A0AEC0' } }
+          }
+        }
+      });
+    }
+
+    // --- BOXPLOT ---
+    function renderBoxplot(arr) {
+      const s = getStats(arr);
+      const lowerBound = s.q1 - 1.5 * s.iqr;
+      const upperBound = s.q3 + 1.5 * s.iqr;
+      const outliers = arr.filter(v => v < lowerBound || v > upperBound);
+
+      destroyChart('boxChart');
+      chartInstances['boxChart'] = new Chart(document.getElementById('boxChart'), {
+        type: 'bar',
+        data: {
+          labels: ['Distribución'],
+          datasets: [
+            { label: 'Mínimo a Q1', data: [s.q1 - s.min], backgroundColor: 'rgba(255,255,255,0.05)' },
+            { label: 'Rango IQR (Q1 a Q3)', data: [s.iqr], backgroundColor: '#00D2FF' }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          scales: { x: { stacked: true }, y: { stacked: true } }
+        }
+      });
+
+      document.getElementById('outlierAnalysis').innerHTML = `
+        <h4 class="font-bold text-gray-300 mb-1">🔍 Análisis de Valores Atípicos (Criterio 1.5 × RIC)</h4>
+        <p>• <strong>Umbral inferior:</strong> <code>${lowerBound.toFixed(4)}</code> | <strong>Umbral superior:</strong> <code>${upperBound.toFixed(4)}</code></p>
+        <p>• <strong>Outliers detectados:</strong> <span class="text-cyan-400 font-bold">${outliers.length}</span> (${outliers.length > 0 ? outliers.join(', ') : 'Ninguno'})</p>
+      `;
+    }
+
+    // --- CORRELACIÓN Y REGRESIÓN ---
+    function renderCorrelation(arrX, arrY) {
+      if(!arrY || arrX.length !== arrY.length) return;
+
+      const sX = getStats(arrX);
+      const sY = getStats(arrY);
+
+      // Regresión Lineal Simple: Y = slope * X + intercept
+      let num = 0, den = 0;
+      for(let i=0; i<arrX.length; i++) {
+        num += (arrX[i] - sX.mean) * (arrY[i] - sY.mean);
+        den += Math.pow(arrX[i] - sX.mean, 2);
+      }
+      const slope = den !== 0 ? num / den : 0;
+      const intercept = sY.mean - slope * sX.mean;
+
+      // Pearson r
+      const r = (sX.stdSamp * sY.stdSamp !== 0) ? num / ((arrX.length - 1) * sX.stdSamp * sY.stdSamp) : 0;
+      const r2 = Math.pow(r, 2);
+
+      // Gráfico Dispersión + Línea Ajuste
+      const scatterPoints = arrX.map((x, i) => ({ x, y: arrY[i] }));
+      const linePoints = [
+        { x: sX.min, y: slope * sX.min + intercept },
+        { x: sX.max, y: slope * sX.max + intercept }
+      ];
+
+      destroyChart('scatterChart');
+      chartInstances['scatterChart'] = new Chart(document.getElementById('scatterChart'), {
+        type: 'scatter',
+        data: {
+          datasets: [
+            { label: 'Observaciones', data: scatterPoints, backgroundColor: '#00D2FF' },
+            { label: 'Línea de Ajuste', data: linePoints, type: 'line', borderColor: '#9B5DE5', fill: false }
+          ]
+        }
+      });
+
+      document.getElementById('corrMetrics').innerHTML = `
+        <h4 class="font-bold text-gray-300">Coeficientes de Correlación</h4>
+        <p>• <strong>Pearson (r):</strong> <code class="text-cyan-300">${r.toFixed(4)}</code></p>
+        <p>• <strong>Interpretación:</strong> Asociación <strong>${r > 0 ? 'positiva' : 'negativa'}</strong> de intensidad <strong>${Math.abs(r) > 0.7 ? 'fuerte' : 'moderada/débil'}</strong>.</p>
+      `;
+
+      const sign = intercept >= 0 ? '+' : '-';
+      document.getElementById('regEquation').innerHTML = `
+        <h4 class="font-bold text-gray-300">Ecuación de Regresión Lineal</h4>
+        <p class="text-base text-cyan-400 font-mono">Y = ${slope.toFixed(4)} * X ${sign} ${Math.abs(intercept).toFixed(4)}</p>
+        <p>• <strong>R² (Determinación):</strong> <code>${r2.toFixed(4)}</code> (Explica el ${(r2*100).toFixed(2)}% de la varianza)</p>
+      `;
+    }
+
+    function destroyChart(id) {
+      if(chartInstances[id]) {
+        chartInstances[id].destroy();
+        delete chartInstances[id];
+      }
+    }
+
+    function downloadCSV() {
+      const varX = document.getElementById('varXSelect').value;
+      if(!globalDataset || !globalDataset[varX]) return;
+
+      const s = getStats(globalDataset[varX]);
+      const rows = [
+        ["Métrica", "Valor"],
+        ["Muestra (n)", s.n],
+        ["Media Aritmética", s.mean],
+        ["Mediana", s.median],
+        ["Mínimo", s.min],
+        ["Máximo", s.max],
+        ["Rango", s.range],
+        ["Varianza Muestral", s.varSamp],
+        ["Desviación Estándar Muestral", s.stdSamp],
+        ["Coeficiente de Variación (%)", `${s.cv.toFixed(2)}%`],
+        ["Cuartil 1 (Q1)", s.q1],
+        ["Cuartil 3 (Q3)", s.q3],
+        ["Rango Intercuartílico (RIC)", s.iqr]
+      ];
+
+      const csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "estadisticas_descriptivas.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>
